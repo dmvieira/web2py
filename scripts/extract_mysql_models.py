@@ -34,6 +34,7 @@ data_type_map = dict(
         float='double',
         double='double',
         char='string',
+        enum='string',
         decimal='integer',
         date='date',
         #year = 'date',
@@ -64,7 +65,7 @@ def mysql(database_name, username, password):
     sql_showtables, stderr = p.communicate()
     tables = [re.sub(
         '\|\s+([^\|*])\s+.*', '\1', x) for x in sql_showtables.split()[1:]]
-    connection_string = "legacy_db = DAL('mysql://%s:%s@localhost/%s')" % (
+    connection_string = "db_legacy = DAL('mysql://%s:%s@localhost/%s')" % (
         username, password, database_name)
     legacy_db_table_web2py_code = []
     for table_name in tables:
@@ -88,7 +89,15 @@ def mysql(database_name, username, password):
                 'CREATE TABLE .(\S+). \(', sql_lines[0]).group(1)
             fields = []
             for line in sql_lines[1:-1]:
-                if re.search('KEY', line) or re.search('PRIMARY', line) or re.search(' ID', line) or line.startswith(')'):
+                # getting pk for legacy primary keys
+                if re.search('PRIMARY', line):
+                    hit = re.search('\(.*\)', line)
+                    name = hit.group(0)
+                    name = re.sub('\(`|`\)', '', name)
+                    web2py_table_code += "\n    primarykey=['%s']," % (
+                        name)
+                    continue
+                elif re.search('KEY', line) or re.search(' ID', line) or line.startswith(')'):
                     continue
                 hit = re.search('(\S+)\s+(\S+)(,| )( .*)?', line)
                 if hit is not None:
@@ -97,7 +106,7 @@ def mysql(database_name, username, password):
                     name = re.sub('`', '', name)
                     web2py_table_code += "\n    Field('%s','%s')," % (
                         name, data_type_map[d_type])
-            web2py_table_code = "legacy_db.define_table('%s',%s\n    migrate=False)" % (table_name, web2py_table_code)
+            web2py_table_code = "db_legacy.define_table('%s',%s\n    migrate=False)" % (table_name, web2py_table_code)
             legacy_db_table_web2py_code.append(web2py_table_code)
     #----------------------------------------
     #write the legacy db to file
